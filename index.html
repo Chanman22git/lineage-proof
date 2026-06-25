@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lineage Proof — Reproducibility, measured</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<!-- React + Framer Motion via ESM (no build step) -->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "framer-motion": "https://esm.sh/framer-motion@11.11.0?external=react,react-dom"
+  }
+}
+</script>
+
+<style>
+  :root{
+    --ink:#0A0E11;
+    --ink-2:#0F151A;
+    --panel:#121A20;
+    --panel-2:#16202700;
+    --line:#1E272D;
+    --line-soft:#19222860;
+    --fg:#EAEEE8;
+    --fg-dim:#94A39E;
+    --fg-faint:#5E6E69;
+    --cyan:#52D9C0;       /* matched / reference run */
+    --cyan-deep:#2C9A89;
+    --amber:#E8A33D;      /* divergence */
+    --amber-deep:#B9802B;
+    --red:#E5604D;        /* threshold breach */
+    --grid:#121A20;
+    --display:"Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --body:"Inter", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--ink);
+    color:var(--fg);
+    font-family:var(--body);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  ::selection{background:rgba(82,217,192,.25);color:#fff;}
+
+  /* ambient instrument texture */
+  body::before{
+    content:"";
+    position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(82,217,192,.07), transparent 60%),
+      radial-gradient(100% 60% at 92% 110%, rgba(232,163,61,.05), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.013) 0 1px, transparent 1px 3px);
+  }
+
+  /* ---------- deck shell ---------- */
+  .deck{position:relative;z-index:1;height:100dvh;overflow-y:scroll;scroll-snap-type:y mandatory;scroll-behavior:smooth;}
+  .deck::-webkit-scrollbar{display:none;}
+  .deck{scrollbar-width:none;}
+
+  .slide{
+    min-height:100dvh;scroll-snap-align:start;scroll-snap-stop:always;
+    display:flex;flex-direction:column;justify-content:center;
+    position:relative;
+    padding:clamp(28px,5vw,92px) clamp(22px,7vw,128px);
+  }
+  .slide-inner{width:100%;max-width:1180px;margin:0 auto;}
+
+  /* ---------- reusable type ---------- */
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:12px;
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--fg-dim);margin-bottom:30px;
+  }
+  h1{font-family:var(--display);font-weight:600;line-height:1.0;letter-spacing:-.02em;margin:0;}
+  h2{font-family:var(--display);font-weight:600;line-height:1.05;letter-spacing:-.018em;margin:0 0 22px;
+     font-size:clamp(30px,4.4vw,58px);}
+  .lede{font-size:clamp(17px,1.7vw,22px);line-height:1.5;color:var(--fg-dim);max-width:62ch;}
+  .lede strong{color:var(--fg);font-weight:600;}
+  .accent-cyan{color:var(--cyan);}
+  .accent-amber{color:var(--amber);}
+  .mono{font-family:var(--mono);}
+  .tnum{font-variant-numeric:tabular-nums;}
+
+  /* ============ SLIDE 0 — TITLE ============ */
+  .s0grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;}
+  .wordmark{font-family:var(--display);font-weight:700;font-size:clamp(46px,7.5vw,104px);line-height:.92;letter-spacing:-.035em;}
+  .wordmark .pf{color:var(--cyan);}
+  .title-one{margin-top:24px;font-size:clamp(17px,1.9vw,23px);color:var(--fg-dim);line-height:1.45;max-width:40ch;}
+  .title-one b{color:var(--fg);font-weight:600;}
+  .title-meta{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap;}
+  .chip{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--fg-dim);
+    border:1px solid var(--line);border-radius:999px;padding:7px 14px;background:rgba(255,255,255,.014);}
+  .chip b{color:var(--cyan);font-weight:600;}
+
+  .hero-fig{position:relative;}
+  .hero-fig svg{width:100%;height:auto;display:block;overflow:visible;}
+  .trace{fill:none;stroke-linecap:round;stroke-width:2.5;}
+  .trace-trunk{stroke:var(--cyan);filter:drop-shadow(0 0 6px rgba(82,217,192,.5));}
+  .trace-ref{stroke:var(--cyan);filter:drop-shadow(0 0 6px rgba(82,217,192,.45));}
+  .trace-rep{stroke:var(--amber);filter:drop-shadow(0 0 7px rgba(232,163,61,.5));}
+  .fork-label{font-family:var(--mono);font-size:13px;fill:var(--fg-dim);}
+  .fork-label.amb{fill:var(--amber);}
+  .fork-label.cy{fill:var(--cyan);}
+
+  /* ============ SLIDE 1 — HOOK ============ */
+  .bighook{font-family:var(--display);font-weight:600;letter-spacing:-.02em;line-height:1.06;
+    font-size:clamp(30px,5.2vw,68px);max-width:18ch;}
+  .hook-sub{margin-top:30px;font-size:clamp(16px,1.7vw,21px);color:var(--fg-dim);max-width:58ch;line-height:1.5;}
+  .hook-sub b{color:var(--amber);font-weight:600;}
+
+  /* ============ SLIDE 2 — UMBRELLA / PILLARS ============ */
+  .stack-rows{display:grid;gap:0;margin-top:8px;}
+  .srow{display:grid;grid-template-columns:170px 1fr;gap:22px;align-items:baseline;
+    padding:16px 0;border-top:1px solid var(--line);}
+  .srow .k{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-faint);}
+  .srow .v{font-family:var(--display);font-size:clamp(18px,2vw,26px);color:var(--fg);font-weight:500;}
+  .srow .v small{display:block;font-family:var(--body);font-size:14.5px;color:var(--fg-dim);font-weight:400;margin-top:4px;letter-spacing:0;}
+  .srow.lit .k{color:var(--cyan);}
+  .pillars{display:flex;flex-wrap:wrap;gap:9px;margin-top:30px;}
+  .pill{font-family:var(--mono);font-size:12.5px;letter-spacing:.03em;color:var(--fg-faint);
+    border:1px solid var(--line);border-radius:8px;padding:9px 13px;}
+  .pill.on{color:var(--ink);background:var(--cyan);border-color:var(--cyan);font-weight:600;
+    box-shadow:0 0 22px rgba(82,217,192,.32);}
+  .pill.semi{color:var(--cyan);border-color:var(--cyan-deep);}
+  .pillars-note{margin-top:22px;font-size:16.5px;color:var(--fg-dim);max-width:60ch;line-height:1.5;}
+  .pillars-note b{color:var(--cyan);font-weight:600;}
+
+  /* ============ SLIDE 3 — REFRAME ============ */
+  .versus{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:14px;}
+  .vcard{border:1px solid var(--line);border-radius:14px;padding:26px 24px;background:var(--ink-2);}
+  .vcard.kill{opacity:.62;}
+  .vcard .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px;}
+  .vcard.kill .tag{color:var(--fg-faint);}
+  .vcard.win .tag{color:var(--cyan);}
+  .vcard .vh{font-family:var(--display);font-size:clamp(18px,2vw,25px);line-height:1.2;font-weight:500;}
+  .vcard.kill .vh{text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:2px;color:var(--fg-dim);}
+  .vcard .vb{margin-top:14px;font-size:15px;line-height:1.5;color:var(--fg-dim);}
+  .vcard.win{border-color:var(--cyan-deep);box-shadow:0 0 0 1px rgba(82,217,192,.18),0 18px 60px -30px rgba(82,217,192,.4);}
+
+  /* ============ SLIDE 4 — THE METER (mechanism) ============ */
+  .mech{display:grid;grid-template-columns:1.05fr 1fr;gap:54px;align-items:center;}
+  .steps{display:grid;gap:0;position:relative;}
+  .step{display:grid;grid-template-columns:38px 1fr;gap:18px;align-items:start;padding:15px 0;position:relative;}
+  .step .n{font-family:var(--mono);font-size:13px;color:var(--cyan);border:1px solid var(--cyan-deep);border-radius:50%;
+    width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--ink);z-index:1;}
+  .step .st{font-family:var(--display);font-size:19px;font-weight:500;color:var(--fg);}
+  .step .sd{font-size:14.5px;color:var(--fg-dim);margin-top:3px;line-height:1.45;}
+  .step.hot .n{color:var(--amber);border-color:var(--amber-deep);}
+  .connector{position:absolute;left:18px;top:30px;bottom:30px;width:1px;background:var(--line);transform-origin:top;}
+  .attrib-fig svg{width:100%;height:auto;overflow:visible;}
+  .lay-band{stroke:var(--line);}
+  .lay-name{font-family:var(--mono);font-size:12.5px;fill:var(--fg-dim);}
+  .lay-name.hit{fill:var(--amber);font-weight:600;}
+
+  /* ============ SLIDE 5 — ARCHITECTURE ============ */
+  .arch-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:18px;border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .arch-col{padding:30px 30px;}
+  .arch-col.bad{background:rgba(229,96,77,.05);border-right:1px solid var(--line);}
+  .arch-col.good{background:rgba(82,217,192,.05);}
+  .arch-col .h{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:16px;}
+  .arch-col.bad .h{color:var(--red);}
+  .arch-col.good .h{color:var(--cyan);}
+  .arch-col .big{font-family:var(--display);font-size:clamp(20px,2.3vw,30px);line-height:1.15;font-weight:500;}
+  .arch-col .sm{margin-top:14px;font-size:15px;color:var(--fg-dim);line-height:1.5;}
+  .arch-kicker{margin-top:26px;font-size:clamp(17px,1.8vw,22px);color:var(--fg);line-height:1.45;max-width:64ch;}
+  .arch-kicker b{color:var(--cyan);font-weight:600;}
+
+  /* ============ SLIDE 6 — SCOPE ============ */
+  .scope{display:grid;grid-template-columns:1fr 1fr;gap:46px;margin-top:10px;}
+  .scope-col h3{font-family:var(--mono);font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 18px;}
+  .scope-col.own h3{color:var(--cyan);}
+  .scope-col.not h3{color:var(--fg-faint);}
+  .scope-item{display:flex;gap:13px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line);font-size:16px;line-height:1.4;}
+  .scope-item .mk{flex:none;margin-top:2px;}
+  .scope-col.not .scope-item{color:var(--fg-dim);}
+  .scope-item b{color:var(--fg);font-weight:600;}
+  .scope-foot{margin-top:30px;font-size:clamp(16px,1.7vw,20px);color:var(--fg-dim);line-height:1.5;max-width:64ch;}
+  .scope-foot b{color:var(--cyan);font-weight:600;}
+
+  /* ============ SLIDE 7 — DEMO / LIVE METER ============ */
+  .demo{display:grid;grid-template-columns:.95fr 1.05fr;gap:50px;align-items:center;}
+  .gauge-wrap{position:relative;}
+  .gauge svg{width:100%;height:auto;overflow:visible;}
+  .readout{font-family:var(--mono);text-align:center;margin-top:-18px;}
+  .readout .num{font-size:clamp(40px,6vw,72px);font-weight:600;color:var(--cyan);letter-spacing:.02em;
+    text-shadow:0 0 26px rgba(82,217,192,.35);font-variant-numeric:tabular-nums;}
+  .readout .lab{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg-faint);margin-top:6px;}
+  .live-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
+    letter-spacing:.04em;color:var(--amber);margin-top:14px;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 9px var(--amber);}
+  .bar-attr{margin-top:18px;}
+  .bar-attr .blab{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--fg-dim);margin-bottom:8px;}
+  .bar-track{height:30px;border-radius:8px;overflow:hidden;display:flex;border:1px solid var(--line);}
+  .bar-seg{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--ink);font-weight:600;overflow:hidden;white-space:nowrap;}
+  .seg-skill{background:var(--cyan);}
+  .seg-kb{background:var(--cyan-deep);color:var(--fg);}
+  .seg-api{background:var(--amber);}
+  .seg-model{background:var(--fg-faint);}
+  .illus{font-family:var(--mono);font-size:11.5px;color:var(--fg-faint);margin-top:11px;letter-spacing:.02em;}
+  .demo-h{font-size:15px;color:var(--fg-dim);line-height:1.55;margin-top:18px;max-width:46ch;}
+  .demo-h b{color:var(--fg);font-weight:600;}
+
+  /* ============ SLIDE 8 — CLOSE ============ */
+  .s8inner{text-align:center;}
+  .close-line{font-family:var(--display);font-weight:600;letter-spacing:-.02em;line-height:1.1;
+    font-size:clamp(28px,5vw,62px);max-width:20ch;margin:0 auto;}
+  .close-mark{margin:0 auto 34px;display:block;}
+  .close-foot{margin-top:34px;font-family:var(--mono);font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--fg-dim);}
+  .close-foot .pf{color:var(--cyan);}
+
+  /* ---------- chrome ---------- */
+  .rail{position:fixed;top:0;left:0;right:0;height:2px;background:var(--cyan);z-index:50;transform-origin:0%;
+    box-shadow:0 0 10px rgba(82,217,192,.6);}
+  .hud{position:fixed;bottom:20px;right:22px;z-index:50;display:flex;align-items:center;gap:14px;
+    font-family:var(--mono);font-size:12.5px;color:var(--fg-dim);}
+  .hud .counter b{color:var(--fg);}
+  .timer{cursor:pointer;user-select:none;border:1px solid var(--line);border-radius:8px;padding:6px 11px;
+    background:rgba(10,14,17,.7);backdrop-filter:blur(6px);min-width:104px;text-align:center;letter-spacing:.06em;}
+  .timer.run{color:var(--cyan);border-color:var(--cyan-deep);}
+  .timer.warn{color:var(--amber);border-color:var(--amber-deep);}
+  .timer.over{color:var(--red);border-color:var(--red);}
+  .timer .tl{font-size:9px;letter-spacing:.16em;color:var(--fg-faint);display:block;margin-top:1px;}
+
+  .navbtns{position:fixed;bottom:20px;left:22px;z-index:50;display:flex;gap:8px;}
+  .navbtn{width:38px;height:38px;border:1px solid var(--line);border-radius:9px;background:rgba(10,14,17,.7);
+    backdrop-filter:blur(6px);color:var(--fg-dim);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .navbtn:hover{color:var(--cyan);border-color:var(--cyan-deep);}
+  .navbtn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+  .hint{position:fixed;bottom:68px;left:22px;z-index:49;font-family:var(--mono);font-size:11px;color:var(--fg-faint);letter-spacing:.04em;}
+
+  /* dot rail */
+  .dots{position:fixed;top:50%;right:20px;transform:translateY(-50%);z-index:50;display:flex;flex-direction:column;gap:13px;}
+  .dot{position:relative;width:9px;height:9px;border-radius:50%;border:1px solid var(--fg-faint);background:transparent;cursor:pointer;padding:0;}
+  .dot:hover{border-color:var(--cyan);}
+  .dot-fill{position:absolute;inset:-4px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px rgba(82,217,192,.6);}
+
+  /* presenter notes */
+  .notes{position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:rgba(10,14,17,.94);backdrop-filter:blur(14px);border-top:1px solid var(--cyan-deep);
+    padding:20px clamp(22px,7vw,128px) 22px;max-height:42vh;overflow:auto;}
+  .notes h4{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin:0 0 10px;display:flex;gap:14px;align-items:center;}
+  .notes h4 .secs{color:var(--fg-faint);}
+  .notes p{margin:0;font-size:15.5px;line-height:1.55;color:var(--fg);max-width:78ch;}
+  .notes .cue{color:var(--amber);font-style:italic;}
+  .notes-close{float:right;color:var(--fg-faint);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.1em;background:none;border:none;}
+
+  /* boot / fallback */
+  #boot{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px;
+    font-family:var(--mono);color:var(--fg-faint);font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;background:var(--ink);}
+  #boot .bm{width:46px;height:28px;}
+  #boot.gone{display:none;}
+
+  @media (max-width:880px){
+    .s0grid,.mech,.demo,.versus,.scope{grid-template-columns:1fr;gap:30px;}
+    .arch-grid{grid-template-columns:1fr;}
+    .arch-col.bad{border-right:none;border-bottom:1px solid var(--line);}
+    .srow{grid-template-columns:1fr;gap:6px;}
+    .slide{padding:80px 22px;}
+    .hint,.dots{display:none;}
+    .hero-fig{order:-1;}
+  }
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <svg class="bm" viewBox="0 0 64 38"><path d="M4 19h26" stroke="#52D9C0" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M30 19c16 0 14-15 30-15" stroke="#52D9C0" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M30 19c16 0 14 15 30 15" stroke="#E8A33D" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+  <div>calibrating instrument…</div>
+</div>
+
+<div id="root"></div>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  motion, AnimatePresence, useScroll, useSpring,
+  useInView, useReducedMotion, useMotionValue, animate, useTransform
+} from "framer-motion";
+
+/* ---------------- data ---------------- */
+const META = [
+  { secs: 20, title: "Cold open" },
+  { secs: 22, title: "The unmeasured failure mode" },
+  { secs: 24, title: "The stack: trustworthiness → reproducibility" },
+  { secs: 22, title: "Measurement, not diagnosis" },
+  { secs: 26, title: "How the meter works" },
+  { secs: 24, title: "Why our drift is actionable" },
+  { secs: 20, title: "What we own — and don't" },
+  { secs: 22, title: "The demo — measure live, on stage" },
+  { secs: 14, title: "Close" },
+];
+const NOTES = [
+  "Two runs of one agent. Same input. They start identical, then split. <span class='cue'>This fork is the whole product.</span> Lineage Proof replays an agent's input, measures how often it reproduces, and attributes the split to the layer that caused it. It lives under our AI Trustworthiness initiative as pillar one.",
+  "Here's the honest problem. You cannot state your agents' reproducibility rate. <span class='cue'>Neither can we.</span> We guide agents with skills and knowledge bases and then trust them on faith. The output wobbles, someone quietly re-runs it, and we shrug — 'the model's just non-deterministic.' That shrug, with zero measurement behind it, is a normalized failure mode.",
+  "Where does this sit? Trustworthiness is the goal. Observability instruments it — but traces only show what happened, not whether it repeats. We start at reliability. <span class='cue'>Reproducibility is the precondition for every other pillar:</span> you can't measure validity, safety, or fairness on an agent that isn't stable enough to test twice.",
+  "So we're not selling drift diagnosis — that assumes you've already proven drift matters. You haven't, because you've never measured it. We're selling the meter. <span class='cue'>You don't need to prove the disease to sell the thermometer.</span>",
+  "Mechanically: replay the input twice, diff the two lineages, and attribute the divergence to a layer — skill version, KB chunk, API, or model. Aggregate into a consistency percentage; alert when it drops. <span class='cue'>Replay isn't the cleverness — it's the instrument that generates a number nobody currently has.</span>",
+  "'But you over-constrained your agents — what drift is left?' Exactly the right question. In an autonomous shop, divergence is un-actionable sampling noise. In ours, it's controllable infra drift — a skill bumped, a chunk changed. <span class='cue'>So the residual drift is roughly a hundred percent actionable.</span> The architecture makes the attribution worth having.",
+  "And we're explicit about scope. We own reliability and lineage accountability. We do not claim correctness — a reproducibly-wrong agent scores 100%, and we'll say so — and we don't catch a prompt injection. <span class='cue'>That's the point: we clear the noise floor so a correctness or safety eval is even measurable.</span>",
+  "The demo reads the meter live — no number is pre-baked. We produce the first reproducibility measurement of our own fleet, plus the breakdown of what caused the divergence. <span class='cue'>And if most of it turns out to be config, that's a finding, not a failure</span> — it tells you where to invest.",
+  "Lineage Proof establishes the reproducibility floor that makes every other trustworthiness measurement possible. <span class='cue'>That's it — thank you.</span>",
+];
+const TOTAL = META.length;
+const EASE = [0.16, 1, 0.3, 1];
+
+/* ---------------- motion helpers ---------------- */
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
+};
+const item = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: EASE } },
+};
+const M = (props) => <motion.div variants={item} {...props} />;
+
+/* viewport config for whileInView (re-triggers on each visit) */
+const VP = { amount: 0.5 };
+
+/* a slide that fires onActive when it crosses center, and runs stagger reveals */
+function Slide({ index, setCurrent, className, children, innerClass }) {
+  const ref = useRef(null);
+  const active = useInView(ref, { amount: 0.55 });
+  useEffect(() => { if (active) setCurrent(index); }, [active, index, setCurrent]);
+  return (
+    <section ref={ref} className={"slide " + (className || "")} id={"s" + index}>
+      <motion.div
+        className={"slide-inner " + (innerClass || "")}
+        variants={container}
+        initial="hidden"
+        whileInView="show"
+        viewport={VP}
+      >
+        {children}
+      </motion.div>
+    </section>
+  );
+}
+
+const Eyebrow = ({ children, fork }) => (
+  <M className="eyebrow">
+    {fork && (
+      <svg width="22" height="14" viewBox="0 0 22 14" style={{ flex: "none" }}>
+        <path d="M1 7h9" stroke="#52D9C0" strokeWidth="2" fill="none" />
+        <path d="M10 7c5 0 5-5 11-5" stroke="#52D9C0" strokeWidth="2" fill="none" />
+        <path d="M10 7c5 0 5 5 11 5" stroke="#E8A33D" strokeWidth="2" fill="none" />
+      </svg>
+    )}
+    <span>{children}</span>
+  </M>
+);
+
+/* ---------------- hero diverging traces ---------------- */
+function HeroFork() {
+  const reduce = useReducedMotion();
+  const ref = useRef(null);
+  const inView = useInView(ref, { amount: 0.5 });
+  const draw = (delay, dur) =>
+    reduce
+      ? { initial: { pathLength: 1 }, animate: { pathLength: 1 } }
+      : {
+          initial: { pathLength: 0 },
+          animate: inView ? { pathLength: 1 } : { pathLength: 0 },
+          transition: { duration: dur, ease: [0.65, 0, 0.35, 1], delay },
+        };
+  const fade = (delay) => ({
+    initial: { opacity: 0, y: 8 },
+    animate: inView ? { opacity: 1, y: 0 } : { opacity: 0 },
+    transition: { delay, duration: 0.5 },
+  });
+  return (
+    <M className="hero-fig">
+      <svg ref={ref} viewBox="0 0 560 360" role="img" aria-label="Two agent runs that overlap, then diverge at one layer">
+        <g stroke="#121A20" strokeWidth="1">
+          <line x1="0" y1="90" x2="560" y2="90" /><line x1="0" y1="180" x2="560" y2="180" /><line x1="0" y1="270" x2="560" y2="270" />
+        </g>
+        <motion.line x1="330" y1="40" x2="330" y2="330" stroke="#5E6E69" strokeWidth="1" strokeDasharray="3 4" {...fade(1.55)} />
+        <motion.path className="trace trace-trunk" d="M20 180 H330" {...draw(0.15, 1.0)} />
+        <motion.path className="trace trace-ref" d="M330 180 C 410 180 430 110 540 100" {...draw(1.05, 0.8)} />
+        <motion.path className="trace trace-rep" d="M330 180 C 410 180 430 250 540 262" {...draw(1.05, 0.8)} />
+        <motion.circle cx="540" cy="100" r="4.5" fill="#52D9C0" {...fade(1.8)} />
+        <motion.circle cx="540" cy="262" r="4.5" fill="#E8A33D" {...fade(1.8)} />
+        <motion.g {...fade(1.7)}>
+          <text className="fork-label" x="22" y="166">same input, run twice</text>
+          <text className="fork-label cy" x="548" y="96" textAnchor="end">run A</text>
+          <text className="fork-label amb" x="548" y="282" textAnchor="end">run B · diverged</text>
+          <text className="fork-label amb" x="338" y="55" fontSize="12">which layer drifted?</text>
+        </motion.g>
+        <g fontFamily="'IBM Plex Mono', monospace" fontSize="11">
+          {[
+            { x: 362, y: 206, w: 64, t: "skill v?", d: 1.95 },
+            { x: 362, y: 232, w: 64, t: "KB chunk?", d: 2.08 },
+            { x: 432, y: 206, w: 58, t: "API?", d: 2.21 },
+            { x: 432, y: 232, w: 58, t: "model?", d: 2.34 },
+          ].map((c, i) => (
+            <motion.g key={i} {...fade(c.d)}>
+              <rect x={c.x} y={c.y} width={c.w} height="22" rx="5" fill="#121A20" stroke="#1E272D" />
+              <text x={c.x + c.w / 2} y={c.y + 15} textAnchor="middle" fill="#94A39E">{c.t}</text>
+            </motion.g>
+          ))}
+        </g>
+      </svg>
+    </M>
+  );
+}
+
+/* ---------------- pillar cascade ---------------- */
+const PILLARS = [
+  { t: "Reliability", c: "on" },
+  { t: "Validity" }, { t: "Safety" }, { t: "Security" },
+  { t: "Accountability", c: "semi" },
+  { t: "Explainability" }, { t: "Privacy" }, { t: "Fairness" },
+];
+function Pillars() {
+  return (
+    <motion.div className="pillars"
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+      initial="hidden" whileInView="show" viewport={VP}>
+      {PILLARS.map((p, i) => (
+        <motion.span key={i} className={"pill " + (p.c || "")}
+          variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE } } }}>
+          {p.t}
+        </motion.span>
+      ))}
+    </motion.div>
+  );
+}
+
+/* ---------------- mechanism diagram ---------------- */
+const STEPS = [
+  ["Replay", "Feed the agent the same input twice. Capture both lineages via Phoenix."],
+  ["Diff", "Line the two traces up side by side and locate every divergence point."],
+  ["Attribute", "Flag the layer that drifted — skill version, KB chunk, API response, or model stochasticity.", true],
+  ["Aggregate", "Roll a consistency % across a test suite — the first reproducibility number you've had."],
+  ["Alert", "Fire when consistency drops below threshold; surface which input broke and where."],
+];
+function AttribFig() {
+  const reduce = useReducedMotion();
+  const ref = useRef(null);
+  const inView = useInView(ref, { amount: 0.5 });
+  const bands = [
+    { y: 20, name: "skill version" },
+    { y: 96, name: "knowledge base" },
+    { y: 172, name: "API response  ◂ divergence pinned here", hit: true },
+    { y: 248, name: "model sampling" },
+  ];
+  const drawP = (delay) =>
+    reduce ? { initial: { pathLength: 1 }, animate: { pathLength: 1 } }
+    : { initial: { pathLength: 0 }, animate: inView ? { pathLength: 1 } : { pathLength: 0 }, transition: { duration: 1, ease: [0.65, 0, 0.35, 1], delay } };
+  return (
+    <M className="attrib-fig">
+      <svg ref={ref} viewBox="0 0 460 360" role="img" aria-label="Divergence attributed to one layer of the stack">
+        {bands.map((b, i) => (
+          <motion.rect key={i} className="lay-band" x="20" y={b.y} width="420" height="64" rx="9"
+            fill={b.hit ? "rgba(232,163,61,.08)" : "rgba(255,255,255,.018)"}
+            stroke={b.hit ? "#B9802B" : "#1E272D"}
+            initial={{ opacity: 0, x: -12 }}
+            animate={inView ? { opacity: 1, x: 0 } : { opacity: 0 }}
+            transition={{ delay: 0.1 + i * 0.09, duration: 0.5, ease: EASE }} />
+        ))}
+        {bands.map((b, i) => (
+          <text key={i} className={"lay-name " + (b.hit ? "hit" : "")} x="38" y={b.y + 36}>{b.name}</text>
+        ))}
+        <motion.path className="trace trace-ref" d="M360 20 V172 C360 200 372 200 372 204 V340" {...drawP(0.5)} />
+        <motion.path className="trace trace-rep" d="M360 20 V172 C360 200 408 200 408 204 V340" {...drawP(0.5)} />
+        <motion.circle cx="372" cy="204" r="4" fill="#52D9C0" initial={{ scale: 0 }} animate={inView ? { scale: 1 } : { scale: 0 }} transition={{ delay: 1.4, type: "spring", stiffness: 300 }} />
+        <motion.circle cx="408" cy="204" r="4" fill="#E8A33D" initial={{ scale: 0 }} animate={inView ? { scale: 1 } : { scale: 0 }} transition={{ delay: 1.5, type: "spring", stiffness: 300 }} />
+      </svg>
+    </M>
+  );
+}
+
+/* ---------------- live gauge ---------------- */
+function Gauge() {
+  const reduce = useReducedMotion();
+  const ref = useRef(null);
+  const inView = useInView(ref, { amount: 0.5 });
+  const [num, setNum] = useState("— —");
+  const SETTLE = 0.82; // visual resting point — NOT a claimed measurement
+  useEffect(() => {
+    if (!inView) return;
+    if (reduce) { setNum("▮▮.▮%"); return; }
+    let raf, start;
+    const dur = 1400;
+    const frame = (now) => {
+      if (!start) start = now;
+      const t = Math.min(1, (now - start) / dur);
+      setNum(t < 1 ? Math.floor(40 + Math.random() * 55) + "%" : "▮▮.▮%");
+      if (t < 1) raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, reduce]);
+  return (
+    <M className="gauge-wrap">
+      <div className="gauge" ref={ref}>
+        <svg viewBox="0 0 300 180" role="img" aria-label="Reproducibility gauge, measured live">
+          <path d="M30 165 A120 120 0 0 1 270 165" fill="none" stroke="#1E272D" strokeWidth="14" strokeLinecap="round" />
+          {[0,0.25,0.5,0.75,1].map((p,i)=>{
+            const a=Math.PI-(p*Math.PI), cx=150+120*Math.cos(a), cy=165-120*Math.sin(a);
+            return <line key={i} x1={150+108*Math.cos(a)} y1={165-108*Math.sin(a)} x2={150+126*Math.cos(a)} y2={165-126*Math.sin(a)} stroke="#2A3640" strokeWidth="1.5"/>;
+          })}
+          <motion.path d="M30 165 A120 120 0 0 1 270 165" fill="none" stroke="#52D9C0" strokeWidth="14" strokeLinecap="round"
+            style={{ filter: "drop-shadow(0 0 8px rgba(82,217,192,.5))" }}
+            initial={{ pathLength: 0 }}
+            animate={inView ? { pathLength: SETTLE } : { pathLength: 0 }}
+            transition={reduce ? { duration: 0 } : { duration: 1.4, ease: [0.16, 1, 0.3, 1] }} />
+        </svg>
+      </div>
+      <div className="readout">
+        <div className="num">{num}</div>
+        <div className="lab">reproducibility · this run</div>
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <span className="live-tag">
+          <motion.span className="live-dot" animate={reduce ? {} : { opacity: [1, 0.25, 1] }} transition={{ duration: 1.4, repeat: Infinity }} />
+          measured on stage — not a slide value
+        </span>
+      </div>
+    </M>
+  );
+}
+
+function AttribBars() {
+  const segs = [
+    { c: "seg-skill", w: 46, t: "skill" },
+    { c: "seg-kb", w: 24, t: "KB" },
+    { c: "seg-api", w: 22, t: "API" },
+    { c: "seg-model", w: 8, t: "model" },
+  ];
+  return (
+    <M>
+      <div className="bar-attr">
+        <div className="blab"><span>divergence attributed by layer</span><span>illustrative shape</span></div>
+        <motion.div className="bar-track"
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } } }}
+          initial="hidden" whileInView="show" viewport={VP}>
+          {segs.map((s, i) => (
+            <motion.div key={i} className={"bar-seg " + s.c}
+              variants={{ hidden: { width: 0 }, show: { width: s.w + "%", transition: { duration: 0.9, ease: EASE } } }}>
+              {s.t}
+            </motion.div>
+          ))}
+        </motion.div>
+        <div className="illus">Shape shown to convey the output — real proportions generated live from the run.</div>
+      </div>
+      <p className="demo-h">The deliverable on stage is the <b>first reproducibility measurement of our agent fleet</b> — the number, and the breakdown of what caused the divergence we found. <b>If the run shows most drift is config, that's a finding,</b> not a failure: it tells you to invest in versioning discipline before replay infra. A tool willing to report its own limits is on-brand for trustworthiness.</p>
+    </M>
+  );
+}
+
+/* ---------------- chrome ---------------- */
+function Dots({ current, goto }) {
+  return (
+    <div className="dots">
+      {Array.from({ length: TOTAL }).map((_, i) => (
+        <button key={i} className="dot" aria-label={"Go to slide " + (i + 1)} onClick={() => goto(i)}>
+          {i === current && <motion.span layoutId="dotfill" className="dot-fill" transition={{ type: "spring", stiffness: 380, damping: 30 }} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Timer() {
+  const [running, setRunning] = useState(false);
+  const [s, setS] = useState(0);
+  const startRef = useRef(0);
+  useEffect(() => {
+    if (!running) return;
+    let raf;
+    startRef.current = performance.now() - s * 1000;
+    const tick = (now) => { setS((now - startRef.current) / 1000); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [running]); // eslint-disable-line
+  const toggle = useCallback(() => setRunning((r) => !r), []);
+  useEffect(() => {
+    const h = (e) => { if (e.key.toLowerCase() === "t") toggle(); };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  }, [toggle]);
+  const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+  const fmt = m + ":" + String(ss).padStart(2, "0");
+  const cls = "timer" + (running ? " run" : "") + (s >= 180 ? " over" : s >= 165 ? " warn" : "");
+  return (
+    <div className={cls} onClick={toggle} title="Click or press T · target 3:00">
+      <span className="tnum">{fmt}</span><span className="tl">target 3:00</span>
+    </div>
+  );
+}
+
+/* ---------------- app ---------------- */
+function App() {
+  const deckRef = useRef(null);
+  const slideRefs = useRef([]);
+  const [current, setCurrent] = useState(0);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [hintGone, setHintGone] = useState(false);
+
+  const { scrollYProgress } = useScroll({ container: deckRef });
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, restDelta: 0.001 });
+
+  const goto = useCallback((idx) => {
+    const i = Math.max(0, Math.min(TOTAL - 1, idx));
+    const el = document.getElementById("s" + i);
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); goto(current + 1); }
+      else if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); goto(current - 1); }
+      else if (e.key === "Home") goto(0);
+      else if (e.key === "End") goto(TOTAL - 1);
+      else if (e.key.toLowerCase() === "p") setNotesOpen((o) => !o);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [current, goto]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setHintGone(true), 6000);
+    const b = document.getElementById("boot"); if (b) b.classList.add("gone");
+    return () => clearTimeout(t);
+  }, []);
+
+  const setCur = useCallback((i) => setCurrent(i), []);
+
+  return (
+    <>
+      <motion.div className="rail" style={{ scaleX }} />
+
+      <div className="deck" ref={deckRef}>
+        {/* 0 — TITLE */}
+        <Slide index={0} setCurrent={setCur} innerClass="s0grid">
+          <div>
+            <Eyebrow fork>AI Trustworthiness Initiative · Pillar One</Eyebrow>
+            <M className="wordmark">Lineage<br /><span className="pf">Proof</span></M>
+            <M><p className="title-one">The <b>meter</b> for agent reproducibility. Replay an agent's input, measure how often it reproduces, and attribute the divergence to the layer that caused it.</p></M>
+            <M className="title-meta">
+              <span className="chip">replay <b>→</b> diff <b>→</b> attribute</span>
+              <span className="chip">built on EvalLib · Phoenix · OTel</span>
+            </M>
+          </div>
+          <HeroFork />
+        </Slide>
+
+        {/* 1 — HOOK */}
+        <Slide index={1} setCurrent={setCur}>
+          <Eyebrow>01 — the honest problem</Eyebrow>
+          <M><h2 className="bighook">You can't state your agents' reproducibility rate. <span className="accent-cyan">Neither can we.</span> We ship them anyway.</h2></M>
+          <M><p className="hook-sub">Teams guide agents with skills and knowledge bases, then trust them on faith. The output wobbles, someone silently re-runs it, and we shrug: <b>"the model's just non-deterministic."</b> That shrug — accepting non-reproducibility as inevitable, with zero measurement — is a normalized failure mode. Nobody has the number. Including us.</p></M>
+        </Slide>
+
+        {/* 2 — UMBRELLA */}
+        <Slide index={2} setCurrent={setCur}>
+          <Eyebrow>02 — where this sits</Eyebrow>
+          <M><h2>Reproducibility is the <span className="accent-cyan">precondition</span>, not a peripheral metric.</h2></M>
+          <M className="stack-rows">
+            <div className="srow"><div className="k">The goal</div><div className="v">Trustworthiness<small>Can we rely on what the agent did?</small></div></div>
+            <div className="srow"><div className="k">Instruments it</div><div className="v">Observability<small>Traces show what happened — not whether it repeats.</small></div></div>
+            <div className="srow lit"><div className="k">We start here</div><div className="v"><span className="accent-cyan">Reliability · Reproducibility</span><small>Is the output stable enough to evaluate at all?</small></div></div>
+          </M>
+          <Pillars />
+          <M><p className="pillars-note">You can't measure validity, safety, or fairness on an agent whose output isn't stable enough to test twice. <b>Fix reproducibility first, and every other pillar becomes measurable.</b></p></M>
+        </Slide>
+
+        {/* 3 — REFRAME */}
+        <Slide index={3} setCurrent={setCur}>
+          <Eyebrow>03 — the wedge</Eyebrow>
+          <M><h2>The product is the <span className="accent-cyan">meter</span>, not the diagnosis.</h2></M>
+          <div className="versus">
+            <M className="vcard kill">
+              <div className="tag">what we're not selling</div>
+              <div className="vh">"Agents drift — we diagnose which layer."</div>
+              <div className="vb">Assumes you've already proven drift is a problem. You haven't — because you've never measured it.</div>
+            </M>
+            <motion.div className="vcard win" variants={item} whileHover={{ y: -4, transition: { duration: 0.25 } }}>
+              <div className="tag">what we're selling</div>
+              <div className="vh">"You don't know your reproducibility rate — here's the instrument that produces it."</div>
+              <div className="vb">True for every team in the room. You don't need to prove the disease exists to sell the thermometer that tells you whether it does.</div>
+            </motion.div>
+          </div>
+        </Slide>
+
+        {/* 4 — MECHANISM */}
+        <Slide index={4} setCurrent={setCur}>
+          <Eyebrow>04 — how it works</Eyebrow>
+          <M><h2>Replay generates the number. Attribution explains it.</h2></M>
+          <div className="mech">
+            <motion.div className="steps" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1 } } }} initial="hidden" whileInView="show" viewport={VP}>
+              <motion.div className="connector" initial={{ scaleY: 0 }} whileInView={{ scaleY: 1 }} viewport={VP} transition={{ duration: 0.9, ease: EASE }} />
+              {STEPS.map((s, i) => (
+                <motion.div key={i} className={"step" + (s[2] ? " hot" : "")}
+                  variants={{ hidden: { opacity: 0, x: -16 }, show: { opacity: 1, x: 0, transition: { duration: 0.5, ease: EASE } } }}>
+                  <div className="n">{i + 1}</div>
+                  <div><div className="st">{s[0]}</div><div className="sd">{s[1]}</div></div>
+                </motion.div>
+              ))}
+            </motion.div>
+            <AttribFig />
+          </div>
+        </Slide>
+
+        {/* 5 — ARCHITECTURE */}
+        <Slide index={5} setCurrent={setCur}>
+          <Eyebrow>05 — why this is worth attributing</Eyebrow>
+          <M><h2>"You over-constrained your agents — what drift is even left?"</h2></M>
+          <M className="arch-grid">
+            <div className="arch-col bad">
+              <div className="h">Fully autonomous shop</div>
+              <div className="big">Divergence is mostly sampling noise.</div>
+              <div className="sm">Un-actionable. You can't fix the model's randomness — you can only tolerate it. Attribution has nothing to point at.</div>
+            </div>
+            <div className="arch-col good">
+              <div className="h">Skill + KB guided shop (us)</div>
+              <div className="big">Divergence is mostly controllable infra drift.</div>
+              <div className="sm">A skill version bumped. A KB chunk changed. A doc updated. Each one is attributable — and fixable.</div>
+            </div>
+          </M>
+          <M><p className="arch-kicker">So yes — we guide strictly. That's exactly why the divergence that remains is <b>~100% actionable.</b> The architecture doesn't hide the problem; it makes the attribution worth having.</p></M>
+        </Slide>
+
+        {/* 6 — SCOPE */}
+        <Slide index={6} setCurrent={setCur}>
+          <Eyebrow>06 — honest scope</Eyebrow>
+          <M><h2>We say out loud what we don't do.</h2></M>
+          <div className="scope">
+            <M className="scope-col own">
+              <h3>We own</h3>
+              <div className="scope-item"><span className="mk accent-cyan">▹</span><div><b>Reliability — reproducibility.</b> Does the same input reproduce?</div></div>
+              <div className="scope-item"><span className="mk accent-cyan">▹</span><div><b>Accountability via lineage.</b> Which layer is responsible for a difference.</div></div>
+            </M>
+            <M className="scope-col not">
+              <h3>We don't claim</h3>
+              <div className="scope-item"><span className="mk">▹</span><div><b>Correctness.</b> A reproducibly-wrong agent scores 100% — and we'll say so.</div></div>
+              <div className="scope-item"><span className="mk">▹</span><div><b>Security.</b> A consistently-firing prompt injection is invisible to replay-diff.</div></div>
+            </M>
+          </div>
+          <M><p className="scope-foot">A reproducibly-wrong agent <i>passing clean is the point</i>: we remove the non-determinism floor so a correctness or safety eval is even <b>measurable</b>. Reproducibility is the precondition for trustworthiness — not the whole of it.</p></M>
+        </Slide>
+
+        {/* 7 — DEMO */}
+        <Slide index={7} setCurrent={setCur}>
+          <Eyebrow>07 — the demo</Eyebrow>
+          <M><h2>We read the meter live. <span className="accent-cyan">No number was pre-baked.</span></h2></M>
+          <div className="demo">
+            <Gauge />
+            <AttribBars />
+          </div>
+        </Slide>
+
+        {/* 8 — CLOSE */}
+        <Slide index={8} setCurrent={setCur} innerClass="s8inner">
+          <motion.svg className="close-mark" width="64" height="38" viewBox="0 0 64 38" variants={item}>
+            <path d="M4 19h26" stroke="#52D9C0" strokeWidth="3" fill="none" strokeLinecap="round" />
+            <path d="M30 19c16 0 14-15 30-15" stroke="#52D9C0" strokeWidth="3" fill="none" strokeLinecap="round" />
+            <path d="M30 19c16 0 14 15 30 15" stroke="#E8A33D" strokeWidth="3" fill="none" strokeLinecap="round" />
+          </motion.svg>
+          <M><h2 className="close-line">We establish the <span className="accent-cyan">reproducibility floor</span> that makes every other trustworthiness measurement possible.</h2></M>
+          <M><div className="close-foot">Lineage<span className="pf">Proof</span> — reproducibility, measured</div></M>
+        </Slide>
+      </div>
+
+      {/* chrome */}
+      <Dots current={current} goto={goto} />
+
+      <div className="navbtns">
+        <motion.button className="navbtn" aria-label="Previous slide" onClick={() => goto(current - 1)} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }}>‹</motion.button>
+        <motion.button className="navbtn" aria-label="Next slide" onClick={() => goto(current + 1)} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }}>›</motion.button>
+      </div>
+
+      <AnimatePresence>
+        {!hintGone && (
+          <motion.div className="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}>
+            ← → navigate · T timer · P notes
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="hud">
+        <span className="counter tnum"><b>{current + 1}</b>/{TOTAL}</span>
+        <Timer />
+      </div>
+
+      <AnimatePresence>
+        {notesOpen && (
+          <motion.div className="notes"
+            initial={{ y: "102%" }} animate={{ y: 0 }} exit={{ y: "102%" }}
+            transition={{ duration: 0.4, ease: EASE }}>
+            <button className="notes-close" onClick={() => setNotesOpen(false)}>P to close ✕</button>
+            <h4><span>{META[current].title}</span><span className="secs">~{META[current].secs}s</span></h4>
+            <p dangerouslySetInnerHTML={{ __html: NOTES[current] }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<!-- Babel standalone last so the importmap + module script resolve -->
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
+<script>
+  // Babel does not auto-run module-type scripts injected before it loaded on some setups;
+  // ensure transform runs for our [type=text/babel] module.
+  if (window.Babel) { /* @babel/standalone auto-transforms text/babel scripts on load */ }
+</script>
+</body>
+</html>
